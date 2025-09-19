@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lf2x"
+version = "0.0.1"
+description = "LangFlow to LangGraph/LangChain conversion toolkit"
+readme = "README.md"
+authors = [
+  { name = "LF2X Team" }
+]
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+  "typer>=0.9,<0.10",
+  "click>=8.1,<8.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "coverage[toml]>=7.4,<8.0",
+  "mypy>=1.9,<2.0",
+  "pytest>=8.1,<9.0",
+  "pytest-cov>=5.0,<6.0",
+  "ruff>=0.4,<0.5",
+  "vulture>=2.11,<3.0",
+  "pre-commit>=3.7,<4.0",
+]
+
+[project.scripts]
+lf2x = "lf2x.cli:app"
+
+[project.urls]
+repository = "https://github.com/firestrand/lf2x"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers --cov=lf2x --cov-report=term-missing --cov-fail-under=90"
+testpaths = ["tests"]
+filterwarnings = [
+  "error",  # keep the skeleton quiet
+  "ignore::DeprecationWarning:click",
+  "ignore::DeprecationWarning:typer",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["lf2x"]
+
+[tool.coverage.report]
+omit = ["tests/*"]
+precision = 2
+show_missing = true
+skip_covered = true
+fail_under = 90
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true
+packages = ["lf2x"]
+ignore_missing_imports = false
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "T20", "PT", "Q"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.vulture]
+min_confidence = 80
+paths = ["src"]
+ignore_names = ["app"]
+
+[tool.typer]
+bool-flag-suffix = ""
