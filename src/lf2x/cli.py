@@ -118,6 +118,8 @@ def convert(
     updated = sum(1 for entry in result.writes if entry.status in {"updated", "would-update"})
     typer.echo(f"files_created={created}")
     typer.echo(f"files_updated={updated}")
+    typer.echo(f"report_markdown={result.report_markdown}")
+    typer.echo(f"report_json={result.report_json}")
 
 
 if __name__ == "__main__":

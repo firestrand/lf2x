@@ -5,7 +5,12 @@ from pathlib import Path
 import pytest
 
 from lf2x.generators.langchain import LangChainProject, generate_langchain_project
-from lf2x.ir import IntermediateRepresentation, build_intermediate_representation
+from lf2x.ir import (
+    IntermediateRepresentation,
+    IRMetadata,
+    IRNode,
+    build_intermediate_representation,
+)
 from lf2x.parser import parse_langflow_json
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "flows"
@@ -33,7 +38,10 @@ def test_generate_langchain_project_creates_expected_structure(tmp_path: Path) -
     config_dir = src_root / "config"
     cli_module = src_root / "cli.py"
     smoke_test = tests_root / "test_flow.py"
+    unit_config_test = project.root / "tests" / "unit" / "test_config.py"
+    unit_cli_test = project.root / "tests" / "unit" / "test_cli.py"
     pyproject = project.root / "pyproject.toml"
+    env_file = project.root / ".env.example"
 
     assert main_chain.exists()
     assert init_file.exists()
@@ -46,6 +54,8 @@ def test_generate_langchain_project_creates_expected_structure(tmp_path: Path) -
     assert (config_dir / "settings.py").exists()
     assert cli_module.exists()
     assert smoke_test.exists()
+    assert unit_config_test.exists()
+    assert unit_cli_test.exists()
     assert pyproject.exists()
 
     main_chain_content = main_chain.read_text()
@@ -57,6 +67,8 @@ def test_generate_langchain_project_creates_expected_structure(tmp_path: Path) -
     assert "langchain" in pyproject.read_text().lower()
     system_prompt = (prompts_dir / "system_prompt.txt").read_text()
     assert ir.name or ir.flow_id in system_prompt
+    assert env_file.exists()
+    assert "No secrets detected" in env_file.read_text()
 
     statuses = {entry.status for entry in project.writes}
     assert "created" in statuses
@@ -64,6 +76,26 @@ def test_generate_langchain_project_creates_expected_structure(tmp_path: Path) -
 
     # Running again should be idempotent
     generate_langchain_project(ir, destination=project.root)
+
+
+def test_generate_langchain_project_extracts_secrets(tmp_path: Path) -> None:
+    secret_ir = IntermediateRepresentation(
+        flow_id="SecretFlow",
+        name="Secret Flow",
+        version="1.0.0",
+        nodes=(IRNode("provider", "SecretNode", {"api_key": "sk-test"}),),
+        edges=(),
+        metadata=IRMetadata(Path("secret.json"), Path("dist")),
+    )
+
+    project = generate_langchain_project(secret_ir, destination=tmp_path / "app")
+
+    env_file = project.root / ".env.example"
+    settings_file = project.root / "src" / project.package_name / "config" / "settings.py"
+
+    assert "SECRETFLOW_PROVIDER_API_KEY" in env_file.read_text()
+    settings_content = settings_file.read_text()
+    assert "secretflow_provider_api_key" in settings_content
 
 
 def test_generate_langchain_project_rejects_branching_flows(tmp_path: Path) -> None:

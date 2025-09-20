@@ -68,16 +68,19 @@ def test_convert_generates_project(tmp_path: Path, capsys: CaptureFixture[str]) 
     convert(source=str(fixture), output_dir=str(output_dir))
 
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0].startswith("flow_id=")
-    assert lines[1] == "target=langchain"
-    project_root = Path(lines[2].split("=", maxsplit=1)[1])
+    data = dict(line.split("=", maxsplit=1) for line in lines)
+    assert data["target"] == "langchain"
+    project_root = Path(data["project_root"])
     assert project_root.exists()
     assert project_root.is_dir()
     assert project_root.parent == output_dir
     assert (project_root / "pyproject.toml").exists()
-    assert lines[3].startswith("package=")
-    assert lines[4].startswith("files_created=")
-    assert lines[5].startswith("files_updated=")
+    assert "package" in data
+    assert "files_created" in data
+    assert "files_updated" in data
+    assert (project_root / ".env.example").exists()
+    assert Path(data["report_markdown"]).exists()
+    assert Path(data["report_json"]).exists()
 
 
 def test_convert_uses_default_output_dir(
@@ -89,7 +92,11 @@ def test_convert_uses_default_output_dir(
     convert(source=str(fixture))
 
     lines = capsys.readouterr().out.splitlines()
-    project_root = Path(lines[2].split("=", maxsplit=1)[1])
+    data = dict(line.split("=", maxsplit=1) for line in lines)
+    project_root = Path(data["project_root"])
     assert project_root.parent == tmp_path / DEFAULT_OUTPUT_DIR
     assert (project_root / "pyproject.toml").exists()
-    assert lines[3].startswith("package=")
+    assert "package" in data
+    assert (project_root / ".env.example").exists()
+    assert Path(data["report_markdown"]).exists()
+    assert Path(data["report_json"]).exists()

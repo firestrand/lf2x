@@ -23,6 +23,7 @@ def test_writer_creates_files(tmp_path: Path) -> None:
 
     assert len(written) == 2
     assert {result.status for result in written} == {"created"}
+    assert all(result.todos == () for result in written)
     assert (tmp_path / "README.md").read_text() == "# Demo\n"
     assert (tmp_path / "src" / "app.py").read_text() == "print('hi')\n"
 
@@ -32,10 +33,10 @@ def test_writer_is_idempotent(tmp_path: Path) -> None:
     file = GeneratedFile(Path("config.toml"), "[tool]\nname='demo'\n")
 
     first = writer.write_files([file])
-    assert first == [WriteResult(path=tmp_path / "config.toml", status="created")]
+    assert first == [WriteResult(path=tmp_path / "config.toml", status="created", todos=())]
 
     second = writer.write_files([file])
-    assert second == [WriteResult(path=tmp_path / "config.toml", status="unchanged")]
+    assert second == [WriteResult(path=tmp_path / "config.toml", status="unchanged", todos=())]
 
 
 def test_writer_rejects_conflicting_file(tmp_path: Path) -> None:
@@ -54,7 +55,7 @@ def test_writer_overwrites_when_enabled(tmp_path: Path) -> None:
 
     result = writer.write_files([GeneratedFile(Path("README.md"), "changed\n")])
 
-    assert result == [WriteResult(path=target, status="updated")]
+    assert result == [WriteResult(path=target, status="updated", todos=())]
     assert target.read_text() == "changed\n"
 
 
@@ -64,7 +65,13 @@ def test_writer_injects_todo_comments(tmp_path: Path) -> None:
 
     results = writer.write_files([file])
 
-    assert results == [WriteResult(path=tmp_path / "src" / "module.py", status="created")]
+    assert results == [
+        WriteResult(
+            path=tmp_path / "src" / "module.py",
+            status="created",
+            todos=("review logic",),
+        )
+    ]
     content = (tmp_path / "src" / "module.py").read_text()
     assert content.startswith("# TODO(lf2x): review logic\n\n")
     assert "print('hi')" in content
@@ -84,5 +91,5 @@ def test_writer_dry_run(tmp_path: Path) -> None:
 
     results = writer.write_files([file])
 
-    assert results == [WriteResult(path=tmp_path / "README.md", status="would-create")]
+    assert results == [WriteResult(path=tmp_path / "README.md", status="would-create", todos=())]
     assert not (tmp_path / "README.md").exists()

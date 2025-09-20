@@ -3,6 +3,7 @@
 from .__about__ import __version__
 from .analyzer import FlowAnalysis, FlowPattern, TargetRecommendation, analyze_flow
 from .config import DEFAULT_OUTPUT_DIR, LF2XSettings
+from .extractors import DetectedSecret, detect_secrets
 from .ir import (
     IntermediateRepresentation,
     IREdge,
@@ -19,6 +20,7 @@ from .parser import (
     parse_langflow_dict,
     parse_langflow_json,
 )
+from .reporting import ConversionReport, ReportArtifacts, build_report, write_conversion_report
 from .rest_client import (
     LangFlowAPIError,
     LangFlowAuthError,
@@ -30,6 +32,12 @@ __all__ = [
     "__version__",
     "DEFAULT_OUTPUT_DIR",
     "LF2XSettings",
+    "DetectedSecret",
+    "detect_secrets",
+    "ConversionReport",
+    "ReportArtifacts",
+    "build_report",
+    "write_conversion_report",
     "FlowAnalysis",
     "FlowPattern",
     "TargetRecommendation",

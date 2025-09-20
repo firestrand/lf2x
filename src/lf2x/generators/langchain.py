@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..analyzer import FlowPattern, analyze_flow
+from ..extractors import DetectedSecret, detect_secrets
 from ..ir import IntermediateRepresentation
 from ..naming import slugify
 from .project import GeneratedFile, ProjectScaffoldWriter, WriteResult
@@ -43,7 +44,8 @@ def generate_langchain_project(
     root = destination.resolve()
     package_name = slugify(ir.flow_id, default="lf2x_project")
     writer = ProjectScaffoldWriter(root, overwrite=overwrite)
-    writes = writer.write_files(_build_files(package_name, ir))
+    secrets = detect_secrets(ir)
+    writes = writer.write_files(_build_files(package_name, ir, secrets))
 
     return LangChainProject(
         root=root,
@@ -53,7 +55,12 @@ def generate_langchain_project(
     )
 
 
-def _build_files(package_name: str, ir: IntermediateRepresentation) -> Iterable[GeneratedFile]:
+def _build_files(
+    package_name: str,
+    ir: IntermediateRepresentation,
+    secrets: Iterable[DetectedSecret],
+) -> Iterable[GeneratedFile]:
+    detected = tuple(secrets)
     yield GeneratedFile(Path("pyproject.toml"), _render_pyproject(package_name))
     yield GeneratedFile(
         Path("src") / package_name / "__init__.py",
@@ -97,7 +104,7 @@ def _build_files(package_name: str, ir: IntermediateRepresentation) -> Iterable[
     )
     yield GeneratedFile(
         Path("src") / package_name / "config" / "settings.py",
-        _render_config_settings(),
+        _render_config_settings(detected),
         todos=("Map generated components to real configuration values",),
     )
     yield GeneratedFile(
@@ -109,7 +116,20 @@ def _build_files(package_name: str, ir: IntermediateRepresentation) -> Iterable[
         Path("tests") / "smoke" / "test_flow.py",
         _render_smoke_test(package_name, ir),
     )
+    yield GeneratedFile(
+        Path("tests") / "unit" / "test_config.py",
+        _render_unit_test_config(package_name, detected),
+    )
+    yield GeneratedFile(
+        Path("tests") / "unit" / "test_cli.py",
+        _render_unit_test_cli(package_name),
+    )
     yield GeneratedFile(Path("README.md"), _render_readme(ir))
+    yield GeneratedFile(
+        Path(".env.example"),
+        _render_env_example(detected),
+        todos=("Set real secret values for deployment",),
+    )
 
 
 def _render_pyproject(package_name: str) -> str:
@@ -264,7 +284,41 @@ def _render_config_init() -> str:
     return "from .settings import settings\n"
 
 
-def _render_config_settings() -> str:
+def _render_config_settings(secrets: tuple[DetectedSecret, ...]) -> str:
+    if secrets:
+        field_lines = "\n".join(f"            {secret.attribute}: str | None" for secret in secrets)
+        assignment_lines = "\n".join(
+            f"                {secret.attribute}=os.getenv('{secret.env_var}'),"
+            for secret in secrets
+        )
+        template = f'''
+        """Runtime settings for the generated LangChain project."""
+
+        from __future__ import annotations
+
+        import os
+        from dataclasses import dataclass
+
+
+        @dataclass(slots=True)
+        class Settings:
+            """Container for environment-driven configuration."""
+
+{field_lines}
+
+
+        def load_settings() -> Settings:
+            """Load configuration from environment variables."""
+
+            return Settings(
+{assignment_lines}
+            )
+
+
+        settings = load_settings()
+        '''
+        return textwrap.dedent(template).strip() + "\n"
+
     return (
         textwrap.dedent(
             '''
@@ -294,6 +348,17 @@ def _render_config_settings() -> str:
         ).strip()
         + "\n"
     )
+
+
+def _render_env_example(secrets: tuple[DetectedSecret, ...]) -> str:
+    if not secrets:
+        return "# No secrets detected in the flow. Add environment variables as needed.\n"
+
+    lines: list[str] = ["# Populate these secrets before deploying."]
+    for secret in secrets:
+        lines.append(f"# Source: node {secret.source_node}, field {secret.field}")
+        lines.append(f"{secret.env_var}=")
+    return "\n".join(lines) + "\n"
 
 
 def _render_cli_module(package_name: str) -> str:
@@ -346,6 +411,40 @@ def _render_smoke_test(package_name: str, ir: IntermediateRepresentation) -> str
     return content + "\n"
 
 
+def _render_unit_test_config(package_name: str, secrets: tuple[DetectedSecret, ...]) -> str:
+    fields_assertion = "\n    ".join(
+        f"assert hasattr(settings, '{secret.attribute}')" for secret in secrets
+    )
+    body = textwrap.dedent(
+        f"""
+        from {package_name}.config import settings
+
+
+        def test_settings_exposes_expected_attributes() -> None:
+            assert settings is not None
+        """
+    ).strip()
+    if fields_assertion:
+        body += f"\n    {fields_assertion}"
+    return body + "\n"
+
+
+def _render_unit_test_cli(package_name: str) -> str:
+    return (
+        textwrap.dedent(
+            f"""
+        from {package_name}.cli import main
+
+
+        def test_cli_main_returns_payload() -> None:
+            result = main("ping")
+            assert result["message"] == "ping"
+        """
+        ).strip()
+        + "\n"
+    )
+
+
 def _render_readme(ir: IntermediateRepresentation) -> str:
     content = (
         textwrap.dedent(
@@ -361,6 +460,7 @@ def _render_readme(ir: IntermediateRepresentation) -> str:
         - `tools/`: wrappers for external integrations
         - `config/`: environment-driven settings
         - `cli.py`: convenience entrypoint for local execution
+        - `.env.example`: template for environment secrets
         """
         )
         .strip()

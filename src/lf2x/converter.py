@@ -13,6 +13,7 @@ from .generators.project import WriteResult
 from .ir import IntermediateRepresentation, build_intermediate_representation
 from .naming import slugify
 from .parser import LangFlowDocument, parse_langflow_json
+from .reporting import write_conversion_report
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +25,8 @@ class ConversionResult:
     project_root: Path
     package_name: str
     writes: tuple[WriteResult, ...]
+    report_markdown: Path
+    report_json: Path
 
 
 def convert_flow(
@@ -56,22 +59,38 @@ def _generate_project(ir: IntermediateRepresentation, *, overwrite: bool) -> Con
     if analysis.recommended_target is TargetRecommendation.LANGCHAIN:
         destination = _destination_root(ir, default="lf2x_project")
         chain_project = generate_langchain_project(ir, destination=destination, overwrite=overwrite)
+        artifacts = write_conversion_report(
+            flow_id=ir.flow_id,
+            target=TargetRecommendation.LANGCHAIN,
+            project_root=chain_project.root,
+            writes=chain_project.writes,
+        )
         return ConversionResult(
             flow_id=ir.flow_id,
             target=TargetRecommendation.LANGCHAIN,
             project_root=chain_project.root,
             package_name=chain_project.package_name,
             writes=chain_project.writes,
+            report_markdown=artifacts.markdown,
+            report_json=artifacts.json,
         )
 
     destination = _destination_root(ir, default="lf2x_graph")
     graph_project = generate_langgraph_project(ir, destination=destination, overwrite=overwrite)
+    artifacts = write_conversion_report(
+        flow_id=ir.flow_id,
+        target=TargetRecommendation.LANGGRAPH,
+        project_root=graph_project.root,
+        writes=graph_project.writes,
+    )
     return ConversionResult(
         flow_id=ir.flow_id,
         target=TargetRecommendation.LANGGRAPH,
         project_root=graph_project.root,
         package_name=graph_project.package_name,
         writes=graph_project.writes,
+        report_markdown=artifacts.markdown,
+        report_json=artifacts.json,
     )
 
 

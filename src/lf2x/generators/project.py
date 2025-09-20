@@ -22,6 +22,7 @@ _COMMENT_PREFIXES: dict[str, str] = {
     ".ini": "#",
     ".cfg": "#",
     ".env": "#",
+    ".example": "#",
 }
 
 
@@ -51,6 +52,7 @@ class WriteResult:
 
     path: Path
     status: WriteStatus
+    todos: tuple[str, ...] = ()
 
 
 class ProjectScaffoldWriter:
@@ -81,7 +83,9 @@ class ProjectScaffoldWriter:
             if target.exists():
                 existing = target.read_text(encoding=self.encoding)
                 if existing == content:
-                    written.append(WriteResult(path=target, status="unchanged"))
+                    written.append(
+                        WriteResult(path=target, status="unchanged", todos=tuple(file.todos))
+                    )
                     continue
                 if not self.overwrite:
                     raise OverwriteError(
@@ -90,13 +94,13 @@ class ProjectScaffoldWriter:
                 status = cast(WriteStatus, "would-update" if self.dry_run else "updated")
                 if not self.dry_run:
                     target.write_text(content, encoding=self.encoding)
-                written.append(WriteResult(path=target, status=status))
+                written.append(WriteResult(path=target, status=status, todos=tuple(file.todos)))
                 continue
 
             status = cast(WriteStatus, "would-create" if self.dry_run else "created")
             if not self.dry_run:
                 target.write_text(content, encoding=self.encoding)
-            written.append(WriteResult(path=target, status=status))
+            written.append(WriteResult(path=target, status=status, todos=tuple(file.todos)))
         return written
 
     def _render_content(self, target: Path, file: GeneratedFile) -> str:

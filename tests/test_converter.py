@@ -35,6 +35,12 @@ def test_convert_flow_selects_target(
     assert (result.project_root / "pyproject.toml").exists()
     assert result.writes
     assert any(entry.status == "created" for entry in result.writes)
+    assert result.report_markdown.exists()
+    assert result.report_json.exists()
+    markdown = result.report_markdown.read_text()
+    assert result.flow_id in markdown
+    report_json = result.report_json.read_text()
+    assert result.flow_id in report_json
 
 
 def test_convert_flow_requires_overwrite_when_files_diverge(tmp_path: Path) -> None:
@@ -52,3 +58,4 @@ def test_convert_flow_requires_overwrite_when_files_diverge(tmp_path: Path) -> N
 
     overwrite_result = convert_flow(source, settings=settings, overwrite=True)
     assert any(entry.status in {"updated", "would-update"} for entry in overwrite_result.writes)
+    assert overwrite_result.report_markdown.exists()

@@ -65,7 +65,10 @@ def test_generate_langgraph_project_creates_structure(tmp_path: Path) -> None:
     config_dir = src_root / "config"
     cli_module = src_root / "cli.py"
     smoke_test = tests_root / "test_flow.py"
+    unit_config_test = project.root / "tests" / "unit" / "test_config.py"
+    unit_cli_test = project.root / "tests" / "unit" / "test_cli.py"
     pyproject = project.root / "pyproject.toml"
+    env_file = project.root / ".env.example"
 
     assert graph_module.exists()
     assert init_file.exists()
@@ -78,6 +81,8 @@ def test_generate_langgraph_project_creates_structure(tmp_path: Path) -> None:
     assert (config_dir / "settings.py").exists()
     assert cli_module.exists()
     assert smoke_test.exists()
+    assert unit_config_test.exists()
+    assert unit_cli_test.exists()
     assert pyproject.exists()
 
     graph_content = graph_module.read_text()
@@ -87,12 +92,44 @@ def test_generate_langgraph_project_creates_structure(tmp_path: Path) -> None:
     smoke_content = smoke_test.read_text()
     assert "main_graph" in smoke_content
     assert "langgraph" in pyproject.read_text().lower()
+    assert env_file.exists()
+    assert "No secrets detected" in env_file.read_text()
 
     statuses = {entry.status for entry in project.writes}
     assert "created" in statuses
     assert len(project.writes) >= 8
 
     generate_langgraph_project(ir, destination=project.root)
+
+
+def test_generate_langgraph_project_extracts_secrets(tmp_path: Path) -> None:
+    nodes = (
+        IRNode("start", "Start", {"api_secret": "super"}),
+        IRNode("left", "Left", {}),
+        IRNode("right", "Right", {}),
+    )
+    edges = (
+        IREdge("e1", "start", "left", {}),
+        IREdge("e2", "start", "right", {}),
+    )
+    ir = IntermediateRepresentation(
+        flow_id="SecretGraph",
+        name="Secret Graph",
+        version="1.0.0",
+        nodes=nodes,
+        edges=edges,
+        metadata=IRMetadata(Path("secret.json"), Path("dist")),
+    )
+
+    project = generate_langgraph_project(ir, destination=tmp_path / "app")
+
+    env_file = project.root / ".env.example"
+    settings_file = project.root / "src" / project.package_name / "config" / "settings.py"
+
+    env_content = env_file.read_text()
+    assert "SECRETGRAPH_START_API_SECRET" in env_content
+    settings_content = settings_file.read_text()
+    assert "secretgraph_start_api_secret" in settings_content
 
 
 def test_generate_langgraph_project_rejects_linear_flows(tmp_path: Path) -> None:
