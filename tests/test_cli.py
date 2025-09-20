@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 from _pytest.capture import CaptureFixture
 
 from lf2x.__about__ import __version__
-from lf2x.cli import configure, version
+from lf2x.cli import configure, convert, version
 from lf2x.config import DEFAULT_OUTPUT_DIR
 
 
@@ -17,7 +18,7 @@ def test_version_function_outputs_version(capsys: CaptureFixture[str]) -> None:
 
 
 def test_configure_function_uses_defaults(capsys: CaptureFixture[str]) -> None:
-    configure(output_dir=str(DEFAULT_OUTPUT_DIR), config="")
+    configure()
     captured = capsys.readouterr()
     stdout = captured.out.splitlines()
     resolved = Path(stdout[0].split("=", maxsplit=1)[1])
@@ -58,3 +59,37 @@ def test_configure_loads_config_file_values(tmp_path: Path, capsys: CaptureFixtu
     assert lines[1] == f"config_file={config_file}"
     assert lines[2] == "api_base_url=https://config"
     assert lines[3] == "api_token=<provided>"
+
+
+def test_convert_generates_project(tmp_path: Path, capsys: CaptureFixture[str]) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "flows" / "simple_passthrough.json"
+    output_dir = tmp_path / "out"
+
+    convert(source=str(fixture), output_dir=str(output_dir))
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("flow_id=")
+    assert lines[1] == "target=langchain"
+    project_root = Path(lines[2].split("=", maxsplit=1)[1])
+    assert project_root.exists()
+    assert project_root.is_dir()
+    assert project_root.parent == output_dir
+    assert (project_root / "pyproject.toml").exists()
+    assert lines[3].startswith("package=")
+    assert lines[4].startswith("files_created=")
+    assert lines[5].startswith("files_updated=")
+
+
+def test_convert_uses_default_output_dir(
+    tmp_path: Path, capsys: CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "flows" / "simple_passthrough.json"
+    monkeypatch.chdir(tmp_path)
+
+    convert(source=str(fixture))
+
+    lines = capsys.readouterr().out.splitlines()
+    project_root = Path(lines[2].split("=", maxsplit=1)[1])
+    assert project_root.parent == tmp_path / DEFAULT_OUTPUT_DIR
+    assert (project_root / "pyproject.toml").exists()
+    assert lines[3].startswith("package=")
