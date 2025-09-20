@@ -1,6 +1,7 @@
 """Public LF2X package interface."""
 
 from .__about__ import __version__
+from .analyzer import FlowAnalysis, FlowPattern, TargetRecommendation, analyze_flow
 from .config import DEFAULT_OUTPUT_DIR, LF2XSettings
 from .ir import (
     IntermediateRepresentation,
@@ -29,6 +30,10 @@ __all__ = [
     "__version__",
     "DEFAULT_OUTPUT_DIR",
     "LF2XSettings",
+    "FlowAnalysis",
+    "FlowPattern",
+    "TargetRecommendation",
+    "analyze_flow",
     "IntermediateRepresentation",
     "IRNode",
     "IREdge",

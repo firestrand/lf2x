@@ -1,0 +1,35 @@
+# LangFlow component mapping registry (base runtime support)
+#
+# Each entry maps a LangFlow node type to metadata used during conversion.
+# Fields:
+#   type: canonical LangFlow type identifier (string)
+#   supported: bool flag indicating whether LF2X fully supports this component
+#   target: preferred runtime when supported (langchain|langgraph)
+#   notes: optional guidance for partial/unsupported components
+#
+# This registry is intentionally minimal and should evolve as coverage grows.
+
+- type: ChatInput
+  supported: true
+  target: langchain
+  notes: "Linear input node recommended for LCEL workflows."
+
+- type: ChatOutput
+  supported: true
+  target: langchain
+  notes: "Standard output sink; compatible with LangChain and LangGraph."
+
+- type: Agent
+  supported: true
+  target: langgraph
+  notes: "Agent nodes usually indicate branching logic; prefer LangGraph."
+
+- type: AgentQL
+  supported: partly
+  target: langgraph
+  notes: "Requires custom tool wrapper; emit TODO for manual integration."
+
+- type: TavilySearchComponent
+  supported: partly
+  target: langgraph
+  notes: "External tool; generate stub and flag follow-up in conversion report."
