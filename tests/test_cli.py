@@ -7,8 +7,12 @@ import yaml
 from _pytest.capture import CaptureFixture
 
 from lf2x.__about__ import __version__
-from lf2x.cli import configure, convert, version
+from lf2x.cli import analyze, configure, convert, validate, version
 from lf2x.config import DEFAULT_OUTPUT_DIR
+
+
+def _output_to_dict(text: str) -> dict[str, str]:
+    return dict(line.split("=", maxsplit=1) for line in text.splitlines() if "=" in line)
 
 
 def test_version_function_outputs_version(capsys: CaptureFixture[str]) -> None:
@@ -20,12 +24,12 @@ def test_version_function_outputs_version(capsys: CaptureFixture[str]) -> None:
 def test_configure_function_uses_defaults(capsys: CaptureFixture[str]) -> None:
     configure()
     captured = capsys.readouterr()
-    stdout = captured.out.splitlines()
-    resolved = Path(stdout[0].split("=", maxsplit=1)[1])
+    data = _output_to_dict(captured.out)
+    resolved = Path(data["output_dir"])
     assert resolved.name == DEFAULT_OUTPUT_DIR.name
-    assert stdout[1] == "config_file=<none>"
-    assert stdout[2] == "api_base_url=<none>"
-    assert stdout[3] == "api_token=<none>"
+    assert data["config_file"] == "<none>"
+    assert data["api_base_url"] == "<none>"
+    assert data["api_token"] == "<none>"
 
 
 def test_configure_function_handles_explicit_config(
@@ -36,11 +40,11 @@ def test_configure_function_handles_explicit_config(
     output_dir = tmp_path / "dist"
     configure(output_dir=str(output_dir), config=str(config_file))
     captured = capsys.readouterr()
-    lines = captured.out.splitlines()
-    assert lines[0] == f"output_dir={output_dir}"
-    assert lines[1] == f"config_file={config_file}"
-    assert lines[2] == "api_base_url=<none>"
-    assert lines[3] == "api_token=<none>"
+    data = _output_to_dict(captured.out)
+    assert data["output_dir"] == str(output_dir)
+    assert data["config_file"] == str(config_file)
+    assert data["api_base_url"] == "<none>"
+    assert data["api_token"] == "<none>"
 
 
 def test_configure_loads_config_file_values(tmp_path: Path, capsys: CaptureFixture[str]) -> None:
@@ -54,11 +58,11 @@ def test_configure_loads_config_file_values(tmp_path: Path, capsys: CaptureFixtu
         )
     )
     configure(config=str(config_file))
-    lines = capsys.readouterr().out.splitlines()
-    assert lines[0].endswith("configured")
-    assert lines[1] == f"config_file={config_file}"
-    assert lines[2] == "api_base_url=https://config"
-    assert lines[3] == "api_token=<provided>"
+    data = _output_to_dict(capsys.readouterr().out)
+    assert data["output_dir"].endswith("configured")
+    assert data["config_file"] == str(config_file)
+    assert data["api_base_url"] == "https://config"
+    assert data["api_token"] == "<provided>"
 
 
 def test_convert_generates_project(tmp_path: Path, capsys: CaptureFixture[str]) -> None:
@@ -67,8 +71,7 @@ def test_convert_generates_project(tmp_path: Path, capsys: CaptureFixture[str]) 
 
     convert(source=str(fixture), output_dir=str(output_dir))
 
-    lines = capsys.readouterr().out.splitlines()
-    data = dict(line.split("=", maxsplit=1) for line in lines)
+    data = _output_to_dict(capsys.readouterr().out)
     assert data["target"] == "langchain"
     project_root = Path(data["project_root"])
     assert project_root.exists()
@@ -91,8 +94,7 @@ def test_convert_uses_default_output_dir(
 
     convert(source=str(fixture))
 
-    lines = capsys.readouterr().out.splitlines()
-    data = dict(line.split("=", maxsplit=1) for line in lines)
+    data = _output_to_dict(capsys.readouterr().out)
     project_root = Path(data["project_root"])
     assert project_root.parent == tmp_path / DEFAULT_OUTPUT_DIR
     assert (project_root / "pyproject.toml").exists()
@@ -100,3 +102,25 @@ def test_convert_uses_default_output_dir(
     assert (project_root / ".env.example").exists()
     assert Path(data["report_markdown"]).exists()
     assert Path(data["report_json"]).exists()
+
+
+def test_analyze_reports_flow_characteristics(tmp_path: Path, capsys: CaptureFixture[str]) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "flows" / "simple_passthrough.json"
+
+    analyze(source=str(fixture))
+
+    data = _output_to_dict(capsys.readouterr().out)
+    assert data["pattern"] == "linear"
+    assert data["recommended_target"] == "langchain"
+    assert data["node_count"] == "2"
+    assert data["edge_count"] == "1"
+
+
+def test_validate_confirms_flow_is_valid(capsys: CaptureFixture[str]) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "flows" / "simple_passthrough.json"
+
+    validate(source=str(fixture))
+
+    data = _output_to_dict(capsys.readouterr().out)
+    assert data["valid"] == "true"
+    assert data["recommended_target"] == "langchain"

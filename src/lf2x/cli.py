@@ -6,7 +6,10 @@ import typer
 from typer.models import OptionInfo
 
 from . import DEFAULT_OUTPUT_DIR, LF2XSettings, __version__
+from .analyzer import analyze_flow
 from .converter import convert_flow
+from .ir import build_intermediate_representation
+from .parser import parse_langflow_json
 
 app = typer.Typer(add_completion=False, help="LangFlow to X (LF2X) developer tools")
 
@@ -16,6 +19,24 @@ def _derive_search_paths(config_path: Path | None) -> list[Path] | None:
         return None
     parent = config_path.parent if config_path.suffix else config_path
     return [parent, Path.cwd()]
+
+
+def _normalize_option(value: str | OptionInfo | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, OptionInfo):
+        return None
+    return value or None
+
+
+def _build_settings(*, output_value: str | None, config_value: str | None) -> LF2XSettings:
+    config_path = Path(config_value) if config_value else None
+    search_paths = _derive_search_paths(config_path)
+    return LF2XSettings.from_sources(
+        output_dir=output_value,
+        config_file=config_path,
+        search_paths=search_paths,
+    )
 
 
 @app.command()
@@ -41,24 +62,9 @@ def configure(
 ) -> None:
     """Show the resolved configuration for the current invocation."""
 
-    output_override: str | None
-    if isinstance(output_dir, OptionInfo):
-        output_override = None
-    else:
-        output_override = output_dir
-
-    if isinstance(config, OptionInfo):
-        config_override: str | None = None
-    else:
-        config_override = config or None
-
-    config_path = Path(config_override) if config_override else None
-    search_paths = _derive_search_paths(config_path)
-    settings = LF2XSettings.from_sources(
-        output_dir=output_override,
-        config_file=config_path,
-        search_paths=search_paths,
-    )
+    output_override = _normalize_option(output_dir)
+    config_override = _normalize_option(config)
+    settings = _build_settings(output_value=output_override, config_value=config_override)
     resolved_dir = settings.resolve_output_dir()
     typer.echo(f"output_dir={resolved_dir}")
     typer.echo(
@@ -90,24 +96,9 @@ def convert(
 ) -> None:
     """Convert a LangFlow export into a code project."""
 
-    output_override: str | None
-    if isinstance(output_dir, OptionInfo):
-        output_override = None
-    else:
-        output_override = output_dir
-
-    if isinstance(config, OptionInfo):
-        config_override: str | None = None
-    else:
-        config_override = config or None
-
-    config_path = Path(config_override) if config_override else None
-    search_paths = _derive_search_paths(config_path)
-    settings = LF2XSettings.from_sources(
-        output_dir=output_override,
-        config_file=config_path,
-        search_paths=search_paths,
-    )
+    output_override = _normalize_option(output_dir)
+    config_override = _normalize_option(config)
+    settings = _build_settings(output_value=output_override, config_value=config_override)
 
     result = convert_flow(source, settings=settings, overwrite=overwrite)
     typer.echo(f"flow_id={result.flow_id}")
@@ -120,6 +111,63 @@ def convert(
     typer.echo(f"files_updated={updated}")
     typer.echo(f"report_markdown={result.report_markdown}")
     typer.echo(f"report_json={result.report_json}")
+
+
+@app.command()
+def analyze(
+    source: str = typer.Argument(..., help="Path to a LangFlow JSON export"),
+    output_dir: str = typer.Option(
+        str(DEFAULT_OUTPUT_DIR),
+        "--output-dir",
+        help="Output directory used to resolve IR metadata",
+        show_default=True,
+    ),
+    config: str = typer.Option(
+        "",
+        "--config",
+        help="Optional path to lf2x.yaml configuration file",
+    ),
+) -> None:
+    """Analyze a LangFlow export and report structural characteristics."""
+
+    output_override = _normalize_option(output_dir)
+    config_override = _normalize_option(config)
+    settings = _build_settings(output_value=output_override, config_value=config_override)
+    document = parse_langflow_json(source, settings=settings)
+    ir = build_intermediate_representation(document)
+    analysis = analyze_flow(ir)
+    typer.echo(f"flow_id={ir.flow_id}")
+    typer.echo(f"name={ir.name}")
+    typer.echo(f"pattern={analysis.pattern.name.lower()}")
+    typer.echo(f"recommended_target={analysis.recommended_target.value}")
+    typer.echo(f"has_cycles={str(analysis.has_cycles).lower()}")
+    typer.echo(f"has_branching={str(analysis.has_branching).lower()}")
+    typer.echo(f"node_count={len(ir.nodes)}")
+    typer.echo(f"edge_count={len(ir.edges)}")
+    typer.echo(f"output_dir={settings.resolve_output_dir()}")
+
+
+@app.command()
+def validate(
+    source: str = typer.Argument(..., help="Path to a LangFlow JSON export"),
+    config: str = typer.Option(
+        "",
+        "--config",
+        help="Optional path to lf2x.yaml configuration file",
+    ),
+) -> None:
+    """Validate that a LangFlow export can be parsed and analyzed."""
+
+    config_override = _normalize_option(config)
+    settings = _build_settings(output_value=None, config_value=config_override)
+    document = parse_langflow_json(source, settings=settings)
+    ir = build_intermediate_representation(document)
+    analysis = analyze_flow(ir)
+    typer.echo(f"flow_id={ir.flow_id}")
+    typer.echo("valid=true")
+    typer.echo(f"node_count={len(ir.nodes)}")
+    typer.echo(f"edge_count={len(ir.edges)}")
+    typer.echo(f"recommended_target={analysis.recommended_target.value}")
 
 
 if __name__ == "__main__":
