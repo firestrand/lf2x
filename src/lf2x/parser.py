@@ -1,9 +1,9 @@
-"""Utilities for parsing LangFlow JSON exports into LF2X documents."""
+"""Utilities for parsing LangFlow exports into LF2X documents."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -64,12 +64,43 @@ def parse_langflow_json(
     supported_versions: Sequence[str] = SUPPORTED_VERSIONS,
     encoding: str = "utf-8",
 ) -> LangFlowDocument:
-    """Parse a LangFlow JSON export file."""
+    """Parse a LangFlow JSON export file from disk."""
 
     path = Path(source)
     payload = json.loads(path.read_text(encoding=encoding))
+    return parse_langflow_dict(
+        payload,
+        settings=settings,
+        supported_versions=supported_versions,
+        source_path=path,
+    )
+
+
+def parse_langflow_dict(
+    payload: Mapping[str, Any],
+    *,
+    settings: LF2XSettings | None = None,
+    supported_versions: Sequence[str] = SUPPORTED_VERSIONS,
+    source_path: Path | None = None,
+) -> LangFlowDocument:
+    """Parse a LangFlow payload already loaded into memory."""
 
     export = LangFlowExport.from_mapping(payload)
+    return _document_from_export(
+        export,
+        settings=settings,
+        supported_versions=supported_versions,
+        source_path=source_path,
+    )
+
+
+def _document_from_export(
+    export: LangFlowExport,
+    *,
+    settings: LF2XSettings | None,
+    supported_versions: Sequence[str],
+    source_path: Path | None,
+) -> LangFlowDocument:
     if supported_versions and export.version not in supported_versions:
         message = (
             "Unsupported LangFlow version '"
@@ -82,8 +113,10 @@ def parse_langflow_json(
 
     output_settings = settings or LF2XSettings()
     output_dir = output_settings.resolve_output_dir()
-
-    metadata = FlowMetadata(source_path=path, output_dir=output_dir)
+    metadata = FlowMetadata(
+        source_path=source_path if source_path is not None else Path(export.flow_id + ".json"),
+        output_dir=output_dir,
+    )
 
     return LangFlowDocument(
         flow_id=export.flow_id,
@@ -114,5 +147,6 @@ __all__ = [
     "FlowMetadata",
     "FlowNode",
     "UnsupportedFlowVersionError",
+    "parse_langflow_dict",
     "parse_langflow_json",
 ]
