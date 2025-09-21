@@ -38,7 +38,7 @@ def generate_langgraph_project(
         )
 
     root = destination.resolve()
-    package_name = slugify(ir.flow_id, default="lf2x_graph")
+    package_name = slugify(ir.name or ir.flow_id, default="lf2x_graph")
     writer = ProjectScaffoldWriter(root, overwrite=overwrite)
     secrets = detect_secrets(ir)
     writes = writer.write_files(_build_files(package_name, ir, secrets))

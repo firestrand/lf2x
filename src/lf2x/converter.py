@@ -96,7 +96,7 @@ def _generate_project(ir: IntermediateRepresentation, *, overwrite: bool) -> Con
 
 def _destination_root(ir: IntermediateRepresentation, *, default: str) -> Path:
     base = ir.metadata.output_dir
-    slug = slugify(ir.flow_id, default=default)
+    slug = slugify(ir.name or ir.flow_id, default=default)
     return base / slug
 
 
